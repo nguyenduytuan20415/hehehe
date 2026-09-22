@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>🐬 Dolphin 3D — Spatial Studio</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<style>
+  html, body { margin:0; padding:0; overflow:hidden; background:#030303; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  #canvas-container { position:fixed; inset:0; }
+  .font-mono-tracked { letter-spacing:0.2em; }
+  ::-webkit-scrollbar { display:none; }
+  #dolphin-loader {
+    perspective: 400px;
+    animation: dolphin-spin 1.8s ease-in-out infinite, dolphin-bob 1.8s ease-in-out infinite;
+    filter: drop-shadow(0 0 18px rgba(147, 197, 253, 0.5));
+  }
+  @keyframes dolphin-spin {
+    0%   { transform: rotateY(0deg) rotateZ(0deg); }
+    50%  { transform: rotateY(180deg) rotateZ(-8deg); }
+    100% { transform: rotateY(360deg) rotateZ(0deg); }
+  }
+  @keyframes dolphin-bob {
+    0%, 100% { margin-top: 0px; }
+    50% { margin-top: -14px; }
+  }
+</style>
+</head>
+<body class="select-none text-white">
+
+  <!-- LOADING SCREEN -->
+  <div id="loading-screen" class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black transition-opacity duration-700">
+    <div class="relative flex flex-col items-center">
+      <h1 class="mb-8 flex flex-col items-center">
+        <span id="dolphin-loader" class="text-6xl inline-block">🐬</span>
+      </h1>
+      <div class="w-48 h-[2px] bg-neutral-900 rounded-full overflow-hidden mb-4">
+        <div id="loading-bar" class="h-full bg-neutral-200 transition-all duration-200 ease-out" style="width:0%"></div>
+      </div>
+      <span id="loading-pct" class="text-xs font-mono tracking-widest text-neutral-500">LOADING 00%</span>
+    </div>
+  </div>
+
+  <!-- NAVIGATION -->
+  <nav class="fixed top-0 left-0 right-0 z-40 flex items-center justify-end p-6 md:p-8 pointer-events-none">
+    <div class="hidden md:flex items-center space-x-8 text-xs tracking-widest text-neutral-400 uppercase pointer-events-auto">
+      <span class="hover:text-white transition-colors cursor-pointer">Archive</span>
+      <span class="hover:text-white transition-colors cursor-pointer">About</span>
+      <span class="hover:text-white transition-colors cursor-pointer">Contact</span>
+    </div>
+  </nav>
+
+  <!-- 3D CANVAS -->
+  <div id="canvas-container"></div>
+
+  <!-- CONTROLS -->
+  <div id="controls-bar" class="fixed bottom-6 left-6 right-6 z-40 flex items-center justify-end pointer-events-none">
+    <button id="auto-rotate-btn" class="pointer-events-auto flex items-center space-x-2 text-xs font-mono text-neutral-300 bg-black/50 hover:bg-black/80 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 transition-all active:scale-95">
+      <span id="auto-rotate-dot" class="text-emerald-400">●</span>
+      <span id="auto-rotate-label">AUTO ROTATE: ON</span>
+    </button>
+  </div>
+
+  <!-- DETAIL OVERLAY -->
+  <div id="detail-overlay" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/60 backdrop-blur-md">
+    <div id="detail-card" class="relative max-w-md w-full opacity-0">
+      <button id="detail-close" class="absolute -top-3 -right-3 z-10 w-10 h-10 flex items-center justify-center text-neutral-700 bg-white hover:bg-pink-50 rounded-full shadow-lg border border-pink-100 transition-all active:scale-95">✕</button>
+      <div class="bg-white rounded-[32px] p-3 shadow-2xl">
+        <img id="detail-image" src="" alt="" class="w-full aspect-square object-cover rounded-[22px]" />
+      </div>
+    </div>
+  </div>
+
+<script>
+// ---------------- DATA ----------------
+// Ảnh của bạn: đặt file ảnh vào folder "photos" (cùng cấp với file HTML này),
+// đặt tên lần lượt là 1.jpg, 2.jpg, 3.jpg ... đúng như danh sách dưới đây.
+// Muốn thêm/bớt ảnh: thêm/xoá dòng { image:"photos/xx.jpg" }.
+// Muốn dùng đuôi khác (.png, .jpeg, .webp): sửa lại đuôi file trong dấu "..." cho khớp.
+const PHOTOS_DATA = [
+  { image:"photos/1.jpg" },
+  { image:"photos/2.jpg" },
+  { image:"photos/3.jpg" },
+  { image:"photos/4.jpg" },
+  { image:"photos/5.jpg" },
+  { image:"photos/6.jpg" },
+  { image:"photos/7.jpg" },
+  { image:"photos/8.jpg" },
+  { image:"photos/9.jpg" },
+  { image:"photos/10.jpg" },
+  { image:"photos/11.jpg" },
+  { image:"photos/12.jpg" },
+  { image:"photos/13.jpg" },
+  { image:"photos/14.jpg" },
+  { image:"photos/15.jpg" },
+  { image:"photos/16.jpg" },
+  { image:"photos/17.jpg" },
+  { image:"photos/18.jpg" }
+];
+
+// Distribute all photos evenly around a sphere so they surround the whole scene
+function placePhotosOnSphere(photos){
+  const radius = 11;
+  const count = photos.length;
+  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+  photos.forEach((photo, i) => {
+    const y = count > 1 ? 1 - (i / (count - 1)) * 2 : 0;
+    const r = Math.sqrt(Math.max(0, 1 - y*y));
+    const theta = goldenAngle * i;
+    const jitter = 1 + (Math.random()-0.5)*0.25;
+    const px = Math.cos(theta) * r * radius * jitter;
+    const py = y * radius * 0.65;
+    const pz = Math.sin(theta) * r * radius * jitter;
+    photo.position = [px, py, pz];
+    photo.rotation = [(Math.random()-0.5)*0.5, Math.atan2(px, pz) + Math.PI, (Math.random()-0.5)*0.25];
+  });
+}
+placePhotosOnSphere(PHOTOS_DATA);
+
+// ---------------- STATE ----------------
+const state = {
+  isLoaded: false,
+  isAutoRotate: true,
+  selectedProject: null,
+  hoveredProject: null
+};
+
+// ---------------- LOADING SCREEN ----------------
+(function runLoader(){
+  const bar = document.getElementById('loading-bar');
+  const pct = document.getElementById('loading-pct');
+  const screen = document.getElementById('loading-screen');
+  let progress = 0;
+  const interval = setInterval(() => {
+    progress += Math.floor(Math.random()*8)+2;
+    if (progress >= 100) {
+      progress = 100;
+      clearInterval(interval);
+      setTimeout(() => { screen.style.opacity = '0'; screen.style.pointerEvents = 'none'; }, 300);
+      setTimeout(() => { state.isLoaded = true; screen.style.display='none'; onLoaded(); }, 1000);
+    }
+    bar.style.width = progress + '%';
+    pct.textContent = 'LOADING ' + String(progress).padStart(2,'0') + '%';
+  }, 60);
+})();
+
+// ---------------- THREE.JS SETUP ----------------
+const container = document.getElementById('canvas-container');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#030303');
+scene.fog = new THREE.FogExp2(0x030014, 0.012);
+
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, 0.1, 1000);
+camera.position.set(0,0,20);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance' });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputEncoding = THREE.sRGBEncoding;
+container.appendChild(renderer.domElement);
+
+// Lights
+scene.add(new THREE.AmbientLight(0x8888ff, 0.35));
+const pointLight = new THREE.PointLight(0x4f46e5, 2.5, 15);
+pointLight.position.set(0,0,0);
+scene.add(pointLight);
+const dirLight1 = new THREE.DirectionalLight(0xffffff, 1.2);
+dirLight1.position.set(10,10,5);
+scene.add(dirLight1);
+const dirLight2 = new THREE.DirectionalLight(0x38bdf8, 0.5);
+dirLight2.position.set(-10,-10,-5);
+scene.add(dirLight2);
+
+// Particle field (dense starfield, multiple layers for depth)
+function makeParticleLayer(count, spread, size, opacity, hueMin, hueRange){
+  const pos = new Float32Array(count*3);
+  const col = new Float32Array(count*3);
+  const col3 = new THREE.Color();
+  for (let i=0; i<count; i++){
+    pos[i*3]   = (Math.random()-0.5)*spread;
+    pos[i*3+1] = (Math.random()-0.5)*spread;
+    pos[i*3+2] = (Math.random()-0.5)*spread;
+    col3.setHSL(hueMin+Math.random()*hueRange, 0.55+Math.random()*0.3, 0.6+Math.random()*0.3);
+    col[i*3]=col3.r; col[i*3+1]=col3.g; col[i*3+2]=col3.b;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  geo.setAttribute('color', new THREE.BufferAttribute(col,3));
+  const mat = new THREE.PointsMaterial({ size, vertexColors:true, transparent:true, opacity, blending:THREE.AdditiveBlending, depthWrite:false, sizeAttenuation:true });
+  return new THREE.Points(geo, mat);
+}
+
+// Layer 1: dense distant starfield (huge sphere of tiny points)
+const farStars = makeParticleLayer(6000, 140, 0.055, 0.85, 0.55, 0.35);
+scene.add(farStars);
+
+// Layer 2: mid-range colorful nebula-ish particles
+const particles = makeParticleLayer(1400, 45, 0.09, 0.7, 0.5, 0.3);
+scene.add(particles);
+
+// Layer 3: bright close sparkles
+const nearSparkles = makeParticleLayer(300, 22, 0.14, 0.9, 0.1, 0.15);
+scene.add(nearSparkles);
+
+// Nebula cloud sprites (soft glowing blobs for atmosphere)
+function makeGlowTexture(){
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const grad = ctx.createRadialGradient(size/2,size/2,0,size/2,size/2,size/2);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.4, 'rgba(255,255,255,0.4)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,size,size);
+  return new THREE.CanvasTexture(canvas);
+}
+const glowTexture = makeGlowTexture();
+const nebulaColors = [0x6366f1, 0x38bdf8, 0xa855f7, 0xec4899, 0x22d3ee];
+const nebulaGroup = new THREE.Group();
+for (let i=0; i<14; i++){
+  const mat = new THREE.SpriteMaterial({
+    map: glowTexture,
+    color: nebulaColors[i % nebulaColors.length],
+    transparent: true,
+    opacity: 0.06 + Math.random()*0.08,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  });
+  const sprite = new THREE.Sprite(mat);
+  const scale = 12 + Math.random()*18;
+  sprite.scale.set(scale, scale, 1);
+  sprite.position.set((Math.random()-0.5)*60, (Math.random()-0.5)*60, (Math.random()-0.5)*60 - 10);
+  nebulaGroup.add(sprite);
+}
+scene.add(nebulaGroup);
+
+// Shooting stars
+function makeGlowSpriteMaterial(color){
+  return new THREE.SpriteMaterial({ map: glowTexture, color, transparent:true, opacity:1, blending:THREE.AdditiveBlending, depthWrite:false });
+}
+class ShootingStar {
+  constructor(){
+    this.group = new THREE.Group();
+    this.head = new THREE.Sprite(makeGlowSpriteMaterial(0xffffff));
+    this.head.scale.set(0.5,0.5,1);
+    this.group.add(this.head);
+
+    const trailCount = 18;
+    this.trailPoints = new Float32Array(trailCount*3);
+    const trailGeo = new THREE.BufferGeometry();
+    trailGeo.setAttribute('position', new THREE.BufferAttribute(this.trailPoints,3));
+    const trailMat = new THREE.LineBasicMaterial({ color:0x9dc9ff, transparent:true, opacity:0.7, blending:THREE.AdditiveBlending });
+    this.trail = new THREE.Line(trailGeo, trailMat);
+    this.group.add(this.trail);
+    this.trailCount = trailCount;
+    this.history = [];
+
+    scene.add(this.group);
+    this.reset();
+  }
+  reset(){
+    const side = Math.random() > 0.5 ? 1 : -1;
+    this.start = new THREE.Vector3((Math.random()-0.5)*50 + side*15, 18 + Math.random()*10, (Math.random()-0.5)*40 - 15);
+    this.dir = new THREE.Vector3(-side*(0.8+Math.random()*0.6), -(0.9+Math.random()*0.5), (Math.random()-0.5)*0.4).normalize();
+    this.speed = 22 + Math.random()*18;
+    this.life = 0;
+    this.maxLife = 0.9 + Math.random()*0.7;
+    this.delay = Math.random()*6;
+    this.history = [];
+    this.active = false;
+    this.group.visible = false;
+  }
+  update(delta){
+    if (!this.active){
+      this.delay -= delta;
+      if (this.delay <= 0) { this.active = true; this.group.visible = true; this.head.position.copy(this.start); }
+      return;
+    }
+    this.life += delta;
+    this.head.position.addScaledVector(this.dir, this.speed*delta);
+    this.history.unshift(this.head.position.clone());
+    if (this.history.length > this.trailCount) this.history.pop();
+
+    const posAttr = this.trail.geometry.attributes.position;
+    for (let i=0; i<this.trailCount; i++){
+      const p = this.history[i] || this.head.position;
+      posAttr.setXYZ(i, p.x, p.y, p.z);
+    }
+    posAttr.needsUpdate = true;
+
+    const fade = Math.max(0, 1 - this.life/this.maxLife);
+    this.head.material.opacity = fade;
+    this.trail.material.opacity = fade*0.7;
+
+    if (this.life >= this.maxLife) this.reset();
+  }
+}
+const shootingStars = [];
+for (let i=0; i<6; i++) shootingStars.push(new ShootingStar());
+
+// Planet + ring
+const planetGroup = new THREE.Group();
+const sphere = new THREE.Mesh(
+  new THREE.SphereGeometry(1.2,64,64),
+  new THREE.MeshStandardMaterial({ color:0x2e0518, emissive:0x831843, emissiveIntensity:0.8, roughness:0.2, metalness:0.8 })
+);
+planetGroup.add(sphere);
+// Ring with a radial glow that fades outward (bright at inner edge → soft at outer edge)
+const ringInnerR = 1.85, ringOuterR = 2.75;   // to hơn bản cũ (1.8 → 2.3)
+const ringGeo = new THREE.RingGeometry(ringInnerR, ringOuterR, 96, 1);
+const ringPos = ringGeo.attributes.position;
+const ringColors = new Float32Array(ringPos.count * 3);
+const ringBaseColor = new THREE.Color(0xf9a8d4); // hồng sáng, gần với f472b6/db2777 bạn chọn
+for (let i=0; i<ringPos.count; i++){
+  const x = ringPos.getX(i), y = ringPos.getY(i);
+  const r = Math.sqrt(x*x + y*y);
+  const t = THREE.MathUtils.clamp((r - ringInnerR) / (ringOuterR - ringInnerR), 0, 1);
+  const brightness = Math.pow(1 - t, 1.8); // càng ra ngoài càng mờ (đổi số mũ để chỉnh độ dốc mờ dần)
+  ringColors[i*3]   = ringBaseColor.r * brightness;
+  ringColors[i*3+1] = ringBaseColor.g * brightness;
+  ringColors[i*3+2] = ringBaseColor.b * brightness;
+}
+ringGeo.setAttribute('color', new THREE.BufferAttribute(ringColors, 3));
+
+const ring = new THREE.Mesh(
+  ringGeo,
+  new THREE.MeshBasicMaterial({
+    vertexColors: true,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 1,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  })
+);
+ring.rotation.x = Math.PI/3;
+planetGroup.add(ring);
+scene.add(planetGroup);
+
+// Photo cards — cute pastel polaroid-style frames (no text, just the photo)
+const textureLoader = new THREE.TextureLoader();
+textureLoader.setCrossOrigin('anonymous');
+const cardMeshes = [];
+
+const PASTEL_PALETTE = [0x2e0518, 0x831843, 0xfff3c4, 0xd9f7e3, 0xe6d9ff, 0xffe3d1, 0xd1f0f7, 0xffd1dc];
+
+function roundRectPath(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.arcTo(x+w, y, x+w, y+h, r);
+  ctx.arcTo(x+w, y+h, x, y+h, r);
+  ctx.arcTo(x, y+h, x, y, r);
+  ctx.arcTo(x, y, x+w, y, r);
+  ctx.closePath();
+}
+
+function drawHeart(ctx, cx, cy, size, color){
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(size/24, size/24);
+  ctx.beginPath();
+  ctx.moveTo(0, 6);
+  ctx.bezierCurveTo(-2, 0, -12, -2, -12, -9);
+  ctx.bezierCurveTo(-12, -15, -4, -16, 0, -8);
+  ctx.bezierCurveTo(4, -16, 12, -15, 12, -9);
+  ctx.bezierCurveTo(12, -2, 2, 0, 0, 6);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.restore();
+}
+
+function createCutePolaroidTexture(imageUrl, accentColorHex){
+  return new Promise((resolve) => {
+    const W = 440, H = 560;
+    const canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    const accent = '#' + accentColorHex.toString(16).padStart(6,'0');
+
+    // soft drop shadow behind card
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.35)';
+    ctx.shadowBlur = 28;
+    ctx.shadowOffsetY = 10;
+    roundRectPath(ctx, 14, 10, W-28, H-28, 34);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+    ctx.restore();
+
+    // pastel border card
+    roundRectPath(ctx, 14, 10, W-28, H-28, 34);
+    ctx.fillStyle = accent;
+    ctx.fill();
+
+    // inner white mat
+    roundRectPath(ctx, 30, 26, W-60, W-60, 24);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+
+    const finish = () => {
+      // cute heart sticker in footer area
+      drawHeart(ctx, W/2, H-58, 26, accent);
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.needsUpdate = true;
+      resolve(tex);
+    };
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const size = W-60-16; // inset padding within mat
+      const ix = 38, iy = 34;
+      ctx.save();
+      roundRectPath(ctx, ix, iy, size, size, 18);
+      ctx.clip();
+      // cover-fit
+      const scale = Math.max(size/img.width, size/img.height);
+      const dw = img.width*scale, dh = img.height*scale;
+      ctx.drawImage(img, ix + (size-dw)/2, iy + (size-dh)/2, dw, dh);
+      ctx.restore();
+      finish();
+    };
+    img.onerror = () => {
+      // fallback soft gradient block if image fails to load
+      const size = W-60-16;
+      const ix = 38, iy = 34;
+      const grad = ctx.createLinearGradient(ix, iy, ix+size, iy+size);
+      grad.addColorStop(0, accent);
+      grad.addColorStop(1, '#ffffff');
+      roundRectPath(ctx, ix, iy, size, size, 18);
+      ctx.fillStyle = grad;
+      ctx.fill();
+      finish();
+    };
+    img.src = imageUrl;
+  });
+}
+
+function buildPhotoField(photos){
+  // remove old cards from the scene and free their GPU resources
+  cardMeshes.forEach((group) => {
+    scene.remove(group);
+    group.userData.photoMesh.geometry.dispose();
+    if (group.userData.photoMesh.material.map) group.userData.photoMesh.material.map.dispose();
+    group.userData.photoMesh.material.dispose();
+  });
+  cardMeshes.length = 0;
+
+  placePhotosOnSphere(photos);
+  photos.forEach((photo, idx) => {
+    const group = new THREE.Group();
+    group.position.set(...photo.position);
+    group.rotation.set(...photo.rotation);
+
+    const accent = PASTEL_PALETTE[idx % PASTEL_PALETTE.length];
+    const geo = new THREE.PlaneGeometry(2.1, 2.67);
+    const mat = new THREE.MeshBasicMaterial({ transparent:true, opacity:0.5 });
+    const photoMesh = new THREE.Mesh(geo, mat);
+    group.add(photoMesh);
+
+    createCutePolaroidTexture(photo.image, accent).then((tex) => {
+      mat.map = tex;
+      mat.needsUpdate = true;
+    });
+
+    group.userData = { photo, baseY: photo.position[1], photoMesh };
+    scene.add(group);
+    cardMeshes.push(group);
+  });
+}
+buildPhotoField(PHOTOS_DATA);
+
+// (Đã bỏ tính năng "Thêm ảnh của tôi" — thay ảnh bằng cách sửa PHOTOS_DATA hoặc thư mục photos/)
+
+// OrbitControls
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableZoom = true;
+controls.maxDistance = 26;
+controls.minDistance = 4;
+controls.enablePan = false;
+controls.rotateSpeed = 0.6;
+controls.dampingFactor = 0.05;
+controls.enableDamping = true;
+
+// ---------------- POSTPROCESSING (BLOOM) ----------------
+const composer = new THREE.EffectComposer(renderer);
+composer.addPass(new THREE.RenderPass(scene, camera));
+
+const bloomPass = new THREE.UnrealBloomPass(
+  new THREE.Vector2(window.innerWidth, window.innerHeight),
+  0.9,   // strength
+  0.6,   // radius
+  0.18   // threshold
+);
+composer.addPass(bloomPass);
+
+const copyPass = new THREE.ShaderPass(THREE.CopyShader);
+copyPass.renderToScreen = true;
+composer.addPass(copyPass);
+
+// ---------------- INTERACTION ----------------
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+let hoveredGroup = null;
+
+function onPointerMove(e){
+  const x = e.touches ? e.touches[0].clientX : e.clientX;
+  const y = e.touches ? e.touches[0].clientY : e.clientY;
+  mouse.x = (x/window.innerWidth)*2-1;
+  mouse.y = -(y/window.innerHeight)*2+1;
+
+  if (state.selectedProject) return;
+
+  raycaster.setFromCamera(mouse, camera);
+  const meshes = cardMeshes.map(g => g.userData.photoMesh);
+  const intersects = raycaster.intersectObjects(meshes);
+
+  if (hoveredGroup && (!intersects.length || intersects[0].object !== hoveredGroup.userData.photoMesh)) {
+    hoveredGroup = null;
+  }
+  if (intersects.length > 0) {
+    const mesh = intersects[0].object;
+    hoveredGroup = cardMeshes.find(g => g.userData.photoMesh === mesh);
+    renderer.domElement.style.cursor = 'pointer';
+  } else {
+    renderer.domElement.style.cursor = 'default';
+  }
+}
+renderer.domElement.addEventListener('mousemove', onPointerMove);
+
+function onClick(e){
+  if (!hoveredGroup) return;
+  selectProject(hoveredGroup.userData.photo);
+}
+renderer.domElement.addEventListener('click', onClick);
+
+// ---------------- DETAIL OVERLAY ----------------
+const overlay = document.getElementById('detail-overlay');
+const card = document.getElementById('detail-card');
+const controlsBar = document.getElementById('controls-bar');
+
+function selectProject(photo){
+  state.selectedProject = photo;
+  controls.enabled = false;
+  controlsBar.style.display = 'none';
+
+  document.getElementById('detail-image').src = photo.image;
+
+  overlay.classList.remove('hidden');
+  overlay.classList.add('flex');
+  gsap.fromTo(card, { opacity:0, scale:0.85, y:30 }, { opacity:1, scale:1, y:0, duration:0.8, ease:'power3.out', delay:0.4 });
+
+  const [px,py,pz] = photo.position;
+  gsap.to(camera.position, { x:px, y:py, z:pz+2.8, duration:1.4, ease:'power3.inOut' });
+  gsap.to(controls.target, { x:px, y:py, z:pz, duration:1.4, ease:'power3.inOut' });
+}
+
+function closeDetail(){
+  gsap.to(card, { opacity:0, scale:0.9, y:20, duration:0.4, ease:'power2.in', onComplete:() => {
+    overlay.classList.add('hidden');
+    overlay.classList.remove('flex');
+    state.selectedProject = null;
+    controlsBar.style.display = 'flex';
+  }});
+  gsap.to(camera.position, { x:0, y:0, z:10, duration:1.2, ease:'power2.out', onComplete:() => { controls.enabled = true; } });
+  gsap.to(controls.target, { x:0, y:0, z:0, duration:1.2, ease:'power2.out' });
+}
+
+document.getElementById('detail-close').addEventListener('click', closeDetail);
+
+// ---------------- AUTO ROTATE TOGGLE ----------------
+const autoRotateBtn = document.getElementById('auto-rotate-btn');
+const autoRotateLabel = document.getElementById('auto-rotate-label');
+const autoRotateDot = document.getElementById('auto-rotate-dot');
+autoRotateBtn.addEventListener('click', () => {
+  state.isAutoRotate = !state.isAutoRotate;
+  autoRotateLabel.textContent = 'AUTO ROTATE: ' + (state.isAutoRotate ? 'ON' : 'OFF');
+  autoRotateDot.className = state.isAutoRotate ? 'text-emerald-400' : 'text-neutral-500';
+});
+
+// ---------------- INTRO CAMERA ANIMATION ----------------
+function onLoaded(){
+  camera.position.set(0,0,20);
+  gsap.to(camera.position, { z:10, duration:2.5, ease:'power3.out' });
+}
+
+// ---------------- RESIZE ----------------
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ---------------- ANIMATION LOOP ----------------
+const clock = new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  const delta = clock.getDelta();
+  const elapsed = clock.getElapsedTime();
+
+  planetGroup.rotation.y += delta*0.1;
+  ring.rotation.z += delta*0.05;
+
+  farStars.rotation.y += delta*0.006;
+  particles.rotation.y += delta*0.02;
+  particles.rotation.x += delta*0.005;
+  nearSparkles.rotation.y -= delta*0.035;
+
+  nebulaGroup.children.forEach((sprite, i) => {
+    sprite.material.opacity = 0.06 + Math.sin(elapsed*0.3 + i)*0.03 + 0.06;
+    sprite.rotation.z += delta*0.02;
+  });
+
+  shootingStars.forEach(s => s.update(delta));
+
+  cardMeshes.forEach((group) => {
+    const p = group.userData.photo;
+    group.position.y = group.userData.baseY + Math.sin(elapsed*1.2 + p.position[0])*0.1;
+    const isHovered = hoveredGroup === group;
+    const targetScale = isHovered ? 1.12 : 1.0;
+    group.scale.lerp(new THREE.Vector3(targetScale,targetScale,targetScale), delta*6);
+  });
+
+  if (state.isAutoRotate && !state.selectedProject) {
+    const offset = new THREE.Vector3().subVectors(camera.position, controls.target);
+    const angle = delta*0.15;
+    offset.applyAxisAngle(new THREE.Vector3(0,1,0), angle);
+    camera.position.copy(controls.target).add(offset);
+  }
+
+  controls.update();
+  composer.render();
+}
+animate();
+</script>
+</body>
+</html>

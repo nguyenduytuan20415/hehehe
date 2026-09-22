@@ -1,0 +1,29 @@
+CÁCH THÊM ẢNH CỦA BẠN
+======================
+
+1. Bỏ ảnh của bạn vào ĐÚNG folder "photos" này (cùng cấp với file
+   nexus-3d-portfolio.html, không phải nằm trong folder con khác).
+
+2. Đặt tên file lần lượt: 1.jpg, 2.jpg, 3.jpg, 4.jpg ... cho đến 18.jpg
+   (khớp với danh sách PHOTOS_DATA trong file .html).
+
+3. Nếu ảnh của bạn không phải định dạng .jpg (ví dụ .png, .webp),
+   mở file nexus-3d-portfolio.html bằng Notepad/VS Code, tìm đoạn:
+
+       const PHOTOS_DATA = [
+         { image:"photos/1.jpg" },
+         ...
+
+   rồi sửa đuôi .jpg thành đuôi ảnh thật của bạn cho từng dòng
+   (ví dụ "photos/1.png").
+
+4. Muốn nhiều hơn hoặc ít hơn 18 ảnh: thêm hoặc xoá bớt các dòng
+   { image:"photos/xx.jpg" } trong PHOTOS_DATA, đặt tên file tương ứng.
+
+5. Mở lại file nexus-3d-portfolio.html để xem ảnh mới.
+
+LƯU Ý: Nếu mở file .html trực tiếp mà ảnh không hiện lên (khung
+trắng/hồng trống), có thể trình duyệt đang chặn đọc file ảnh cục bộ
+(hay gặp ở Firefox). Cách khắc phục: dùng Chrome hoặc Edge để mở
+file, hoặc chạy một local server đơn giản trong folder này rồi mở
+qua http://localhost thay vì mở file trực tiếp.
