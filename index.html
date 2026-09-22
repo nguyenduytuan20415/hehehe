@@ -547,6 +547,37 @@ function onClick(e){
   selectProject(hoveredGroup.userData.photo);
 }
 renderer.domElement.addEventListener('click', onClick);
+// ---------------- MOBILE TOUCH ----------------
+renderer.domElement.addEventListener('touchend', (e) => {
+  if (state.selectedProject) return;
+
+  const touch = e.changedTouches[0];
+
+  const rect = renderer.domElement.getBoundingClientRect();
+
+  mouse.x = ((touch.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((touch.clientY - rect.top) / rect.height) * 2 + 1;
+
+  raycaster.setFromCamera(mouse, camera);
+
+  const meshes = cardMeshes.map(
+    g => g.userData.photoMesh
+  );
+
+  const intersects = raycaster.intersectObjects(meshes);
+
+  if (intersects.length > 0) {
+    const mesh = intersects[0].object;
+
+    const group = cardMeshes.find(
+      g => g.userData.photoMesh === mesh
+    );
+
+    if (group) {
+      selectProject(group.userData.photo);
+    }
+  }
+}, { passive: true });
 
 // ---------------- DETAIL OVERLAY ----------------
 const overlay = document.getElementById('detail-overlay');
