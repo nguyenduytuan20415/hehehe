@@ -518,10 +518,10 @@ const mouse = new THREE.Vector2();
 let hoveredGroup = null;
 
 function onPointerMove(e){
-  const x = e.touches ? e.touches[0].clientX : e.clientX;
-  const y = e.touches ? e.touches[0].clientY : e.clientY;
-  mouse.x = (x/window.innerWidth)*2-1;
-  mouse.y = -(y/window.innerHeight)*2+1;
+  if (e.pointerType && e.pointerType !== 'mouse') return;
+
+  mouse.x = (e.clientX/window.innerWidth)*2-1;
+  mouse.y = -(e.clientY/window.innerHeight)*2+1;
 
   if (state.selectedProject) return;
 
@@ -540,13 +540,60 @@ function onPointerMove(e){
     renderer.domElement.style.cursor = 'default';
   }
 }
-renderer.domElement.addEventListener('mousemove', onPointerMove);
+renderer.domElement.addEventListener('pointermove', onPointerMove);
 
-function onClick(e){
-  if (!hoveredGroup) return;
-  selectProject(hoveredGroup.userData.photo);
+let pointerDownX = 0;
+let pointerDownY = 0;
+let pointerDownTime = 0;
+
+function updateRaycastFromPointer(clientX, clientY) {
+  const rect = renderer.domElement.getBoundingClientRect();
+
+  mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+
+  raycaster.setFromCamera(mouse, camera);
+
+  const meshes = cardMeshes.map(g => g.userData.photoMesh);
+  return raycaster.intersectObjects(meshes);
 }
-renderer.domElement.addEventListener('click', onClick);
+
+function handlePointerDown(e) {
+  if (state.selectedProject) return;
+
+  pointerDownX = e.clientX;
+  pointerDownY = e.clientY;
+  pointerDownTime = performance.now();
+}
+
+function handlePointerUp(e) {
+  if (state.selectedProject) return;
+
+  const dx = e.clientX - pointerDownX;
+  const dy = e.clientY - pointerDownY;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  const duration = performance.now() - pointerDownTime;
+
+  // If the user dragged/rotated the scene, don't open a photo.
+  if (distance > 10 || duration > 700) return;
+
+  const intersects = updateRaycastFromPointer(e.clientX, e.clientY);
+
+  if (intersects.length > 0) {
+    const mesh = intersects[0].object;
+
+    const group = cardMeshes.find(
+      g => g.userData.photoMesh === mesh
+    );
+
+    if (group) {
+      selectProject(group.userData.photo);
+    }
+  }
+}
+
+renderer.domElement.addEventListener('pointerdown', handlePointerDown);
+renderer.domElement.addEventListener('pointerup', handlePointerUp);
 
 
 // ---------------- DETAIL OVERLAY ----------------
