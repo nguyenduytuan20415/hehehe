@@ -70,6 +70,33 @@
     </button>
   </div>
 
+  <!-- MUSIC PLAYLIST -->
+  <div id="music-player" class="fixed bottom-6 left-6 z-40 pointer-events-auto select-none">
+
+    <!-- Dropdown danh sách bài hát -->
+    <div id="music-list-panel" class="hidden absolute bottom-full mb-2 left-0 w-60 max-h-64 overflow-y-auto bg-pink-950/70 backdrop-blur-md rounded-2xl border border-pink-300/20 shadow-[0_0_25px_rgba(244,114,182,0.2)] p-1.5">
+      <!-- các item được JS render vào đây -->
+    </div>
+
+    <div class="flex items-center gap-3 bg-pink-950/40 hover:bg-pink-950/60 backdrop-blur-md pl-2 pr-3 py-2 rounded-full border border-pink-300/20 shadow-[0_0_25px_rgba(244,114,182,0.15)] transition-all">
+      <button id="music-toggle" class="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-full bg-pink-400/20 hover:bg-pink-400/30 text-pink-100 transition-all active:scale-95">
+        <span id="music-icon">▶</span>
+      </button>
+      <button id="music-list-toggle" class="flex flex-col leading-tight min-w-0 text-left active:scale-95 transition-transform">
+        <span id="music-title" class="text-xs font-medium text-pink-100 truncate max-w-[110px]">—</span>
+        <span class="text-[10px] font-mono tracking-widest text-pink-300/60 uppercase">Playlist ▾</span>
+      </button>
+      <div class="flex items-center gap-1.5 ml-1">
+        <button id="music-prev" class="w-6 h-6 flex items-center justify-center text-pink-300/70 hover:text-pink-100 transition-colors active:scale-90">⏮</button>
+        <button id="music-next" class="w-6 h-6 flex items-center justify-center text-pink-300/70 hover:text-pink-100 transition-colors active:scale-90">⏭</button>
+      </div>
+    </div>
+    <div id="music-progress-track" class="mt-1.5 mx-1 h-[2px] rounded-full overflow-hidden bg-pink-300/15">
+      <div id="music-progress-bar" class="h-full bg-pink-400 rounded-full" style="width:0%"></div>
+    </div>
+    <audio id="music-audio" preload="none"></audio>
+  </div>
+
   <!-- DETAIL OVERLAY -->
   <div id="detail-overlay" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/60 backdrop-blur-md">
     <div id="detail-card" class="relative max-w-md w-full opacity-0">
@@ -104,13 +131,7 @@ const PHOTOS_DATA = [
   { image:"photos/15.jpg" },
   { image:"photos/16.jpg" },
   { image:"photos/17.jpg" },
-  { image:"photos/18.jpg" },
-  { image:"photos/19.jpg" },
-  { image:"photos/20.jpg" },
-  { image:"photos/21.jpg" },
-  { image:"photos/22.jpg" },
-  { image:"photos/23.jpg" },
-  { image:"photos/24.jpg" }
+  { image:"photos/18.jpg" }
 ];
 
 // Distribute all photos evenly around a sphere so they surround the whole scene
@@ -701,6 +722,121 @@ function animate(){
   composer.render();
 }
 animate();
+</script>
+
+<script>
+// ---------------- MUSIC PLAYLIST (tách riêng, không đụng script Three.js ở trên) ----------------
+// Nhạc của bạn: đặt file mp3 vào folder "music" (cùng cấp với file HTML này),
+// đặt tên lần lượt là 1.mp3, 2.mp3, 3.mp3 ... đúng như danh sách dưới đây,
+// và đổi "title" cho từng bài. Muốn thêm/bớt bài: thêm/xoá dòng trong mảng.
+const MUSIC_DATA = [
+  { title: "LAVIEM", src: "music/1.mp3" },
+  { title: "Tìm em", src: "music/2.mp3" },
+  { title: "SECRET ", src: "music/3.mp3" }
+];
+
+(function initMusicPlayer(){
+  const player = document.getElementById('music-player');
+  const audio = document.getElementById('music-audio');
+  const toggleBtn = document.getElementById('music-toggle');
+  const icon = document.getElementById('music-icon');
+  const titleEl = document.getElementById('music-title');
+  const prevBtn = document.getElementById('music-prev');
+  const nextBtn = document.getElementById('music-next');
+  const progressBar = document.getElementById('music-progress-bar');
+  const progressTrack = document.getElementById('music-progress-track');
+  const listToggleBtn = document.getElementById('music-list-toggle');
+  const listPanel = document.getElementById('music-list-panel');
+
+  let currentIndex = 0;
+
+  function renderList(){
+    listPanel.innerHTML = '';
+    MUSIC_DATA.forEach((track, i) => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'w-full flex items-center gap-2 text-left px-3 py-2 rounded-xl text-xs transition-colors ' +
+        (i === currentIndex
+          ? 'bg-pink-400/25 text-pink-50'
+          : 'text-pink-200/80 hover:bg-pink-400/10 hover:text-pink-50');
+      item.innerHTML =
+        '<span class="w-4 flex-shrink-0">' + (i === currentIndex && !audio.paused ? '♪' : (i+1)) + '</span>' +
+        '<span class="truncate">' + track.title + '</span>';
+      item.addEventListener('click', () => {
+        loadTrack(i, true);
+        closeList();
+      });
+      listPanel.appendChild(item);
+    });
+  }
+
+  function openList(){
+    renderList();
+    listPanel.classList.remove('hidden');
+  }
+  function closeList(){
+    listPanel.classList.add('hidden');
+  }
+  function isListOpen(){
+    return !listPanel.classList.contains('hidden');
+  }
+
+  listToggleBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    isListOpen() ? closeList() : openList();
+  });
+
+  // Bấm ra ngoài thì đóng danh sách
+  document.addEventListener('click', (e) => {
+    if (isListOpen() && !player.contains(e.target)) closeList();
+  });
+
+  function loadTrack(index, autoplay){
+    currentIndex = (index + MUSIC_DATA.length) % MUSIC_DATA.length;
+    const track = MUSIC_DATA[currentIndex];
+    audio.src = track.src;
+    titleEl.textContent = track.title;
+    progressBar.style.width = '0%';
+    if (isListOpen()) renderList();
+    if (autoplay) {
+      audio.play().catch(() => {});
+    }
+  }
+
+  function setPlayingIcon(isPlaying){
+    icon.textContent = isPlaying ? '❚❚' : '▶';
+    if (isListOpen()) renderList();
+  }
+
+  toggleBtn.addEventListener('click', () => {
+    if (!audio.src) loadTrack(currentIndex, false);
+    if (audio.paused) {
+      audio.play().catch(() => {});
+    } else {
+      audio.pause();
+    }
+  });
+
+  prevBtn.addEventListener('click', () => loadTrack(currentIndex - 1, !audio.paused || audio.currentTime > 0));
+  nextBtn.addEventListener('click', () => loadTrack(currentIndex + 1, !audio.paused || audio.currentTime > 0));
+
+  audio.addEventListener('play', () => setPlayingIcon(true));
+  audio.addEventListener('pause', () => setPlayingIcon(false));
+  audio.addEventListener('ended', () => loadTrack(currentIndex + 1, true));
+  audio.addEventListener('timeupdate', () => {
+    if (!audio.duration) return;
+    progressBar.style.width = ((audio.currentTime / audio.duration) * 100) + '%';
+  });
+
+  progressTrack.addEventListener('click', (e) => {
+    if (!audio.duration) return;
+    const rect = progressTrack.getBoundingClientRect();
+    const ratio = (e.clientX - rect.left) / rect.width;
+    audio.currentTime = ratio * audio.duration;
+  });
+
+  loadTrack(0, false);
+})();
 </script>
 </body>
 </html>
